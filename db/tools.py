@@ -2,7 +2,6 @@ import math
 import json
 import re
 
-
 def comp_code_fixer(CompCode):
     pattern = r'^PART[0-9]+'
     if CompCode:
@@ -77,7 +76,7 @@ def load_json(file_path):
             data = json.load(f)
             return data
     except Exception as e:
-        return False
+        return ""
 
 
 def save_json(data, file_path=None):
@@ -98,6 +97,18 @@ def save_json(data, file_path=None):
             return True
     except Exception as e:
         return False
+
+
+def load_txt_css(file_path):
+    """
+    Ładuje plik ze ścieżki file_path.
+    """
+    try:
+        with open(file_path) as f:
+            data = f.read()
+            return data
+    except Exception as e:
+        return ""
 
 
 def create_select_query(**kwargs):
@@ -160,6 +171,21 @@ def compare_components(CompName, project1, project2):
     pad_project1 = project1["pad_info"]["BoardID"][tuple(project1["pad_info"]["BoardID"].keys())[-1]]["CompID"][CompID_project1]["PadName"].keys()
     pad_project2 = project2["pad_info"]["BoardID"][tuple(project2["pad_info"]["BoardID"].keys())[-1]]["CompID"][CompID_project2]["PadName"].keys()
     return pad_project1 == pad_project2
+
+
+def the_same_tolerance(project1, project2):
+    """
+    :param project1:
+    :param project2:
+    :return:
+    """
+    for k, v in project1.items():
+        if k == "PadID":
+            continue
+        if not (project2.get(k) == v):
+            return False
+    return True
+
 
 
 

@@ -3,7 +3,7 @@ import pprint
 
 from db.SPI_query import get_comp_info, get_pad_info, get_project_names_from_spi, update_pad_info
 from db.mysql_con import connect_to_mysql
-from db.tools import comp_code_fixer, compare_components
+from db.tools import comp_code_fixer, compare_components, the_same_tolerance
 
 
 class DataFromSPI:
@@ -29,9 +29,10 @@ class DataFromSPI:
 
     def prepare_comp_info(self, **kwargs):
         database = kwargs.get('database')
+        get_new = kwargs.get('get_new')
         if not database:
             return False
-        if self.buffer.get(database):
+        if self.buffer.get(database) and not get_new:
             comp_info = self.buffer[database].get("comp_info")
             if comp_info:
                 return comp_info
@@ -56,9 +57,10 @@ class DataFromSPI:
 
     def prepare_pad_info(self, **kwargs):
         database = kwargs.get('database')
+        get_new = kwargs.get('get_new')
         if not database:
             return False
-        if self.buffer.get(database):
+        if self.buffer.get(database) and not get_new:
             pad_info = self.buffer[database].get("pad_info")
             if pad_info:
                 return pad_info
@@ -94,24 +96,9 @@ class DataFromSPI:
         return pad_info
 
     def get_project_info(self, database, **kwargs):
-        project_info = kwargs.get('project_info')
-        comp_info = {}
-        pad_info = {}
-
-        if not project_info:
-            comp_info = self.prepare_comp_info(database=database)
-            pad_info = self.prepare_pad_info(database=database)
-        elif project_info:
-            if not project_info.get("comp_info"):
-                comp_info = self.prepare_comp_info(database=database)
-            else:
-                if project_info["comp_info"].get("Project Name") != database:
-                    comp_info = self.prepare_comp_info(database=database)
-            if not project_info.get("pad_info"):
-                pad_info = self.prepare_pad_info(database=database)
-            else:
-                if project_info["pad_info"].get("Project Name") != database:
-                    pad_info = self.prepare_pad_info(database=database)
+        get_new = kwargs.get('get_new')
+        comp_info = self.prepare_comp_info(database=database, get_new=get_new)
+        pad_info = self.prepare_pad_info(database=database, get_new=get_new)
 
         project_info = {
             'Project name': database,
@@ -133,11 +120,15 @@ class DataFromSPI:
         self.clear_update_status()
         project_name_with_correct_tolerance = kwargs.get("project_name_with_correct_tolerance")
         new_project_name = kwargs.get("new_project_name")
-        project_info_with_correct_tolerance = self.get_project_info(database=project_name_with_correct_tolerance)
-        project_info_new_project = self.get_project_info(database=new_project_name)
+        project_info_with_correct_tolerance = self.get_project_info(database=project_name_with_correct_tolerance, get_new=True)
+        project_info_new_project = self.get_project_info(database=new_project_name, get_new=True)
         if project_info_with_correct_tolerance and project_info_new_project:
             pad_info_to_update = self.set_tolerance_in_the_same_CompName(project_with_correct_tolerance=project_info_with_correct_tolerance, new_project=project_info_new_project)
-            self.update_status['STATUS'] = update_pad_info(database=new_project_name, pad_info=pad_info_to_update)
+            if len(pad_info_to_update) > 0:
+                self.update_status['STATUS'] = update_pad_info(database=new_project_name, pad_info=pad_info_to_update)
+            else:
+                self.update_status['STATUS'] = True
+                self.update_status['Statistic']['Changed'] = 0
 
     def get_the_same_CompName(self, project_with_correct_tolerance, new_project):
         CompName_with_correct_tolerance = project_with_correct_tolerance["comp_info"]["CompID"].keys()
@@ -153,9 +144,9 @@ class DataFromSPI:
                     the_same_CompName["CompName"].append(CompName)
                 return the_same_CompName
             else:
-                return {}
+                return the_same_CompName
         else:
-            return {}
+            return the_same_CompName
 
     def set_tolerance_in_the_same_CompName(self, project_with_correct_tolerance, new_project):
         the_same_CompName = self.get_the_same_CompName(project_with_correct_tolerance=project_with_correct_tolerance, new_project=new_project)
@@ -178,10 +169,14 @@ class DataFromSPI:
                 BoardID_corret_tolerance = tuple(project_with_correct_tolerance["pad_info"]["BoardID"].keys())[-1]
             CompID_correct_tolerance = project_with_correct_tolerance["comp_info"]["CompID"][CompName]
             correct_tolerance = project_with_correct_tolerance['pad_info']['BoardID'][BoardID_corret_tolerance]['CompID'][CompID_correct_tolerance]['PadName'][row['PadName']]
-            pad_info_to_update.append({
-                'conditions': f"BoardID={row['BoardID']} AND CompID={row['CompID']} AND PadName=\'{row['PadName']}\'",
-                'correct_tolerance': correct_tolerance
-            })
+            row_to_verification = copy.deepcopy(row)
+            for k in ['BoardID', 'CompID', 'PadName']:
+                row_to_verification.pop(k)
+            if not the_same_tolerance(project1=row_to_verification, project2=correct_tolerance):
+                pad_info_to_update.append({
+                    'conditions': f"BoardID={row['BoardID']} AND CompID={row['CompID']} AND PadName=\'{row['PadName']}\'",
+                    'correct_tolerance': correct_tolerance
+                })
             self.prepare_tolerance_to_show_in_logs(BoardID=row['BoardID'], CompName=CompName, PadName=row['PadName'], original=row, new=correct_tolerance)
         self.update_status["CompName"] = verifed_CompName.copy()
         self.update_status['Statistic'].update({"Changed": len(verifed_CompName)})
@@ -195,12 +190,13 @@ class DataFromSPI:
             self.update_status[k].clear()
 
     def prepare_tolerance_to_show_in_logs(self, BoardID, CompName, PadName, original, new):
-        if not self.update_status['Tolerance']:
-            self.update_status['Tolerance'].append(f"""
-Raport z aktualizacji:
-{'BoardID'}\t{'CompName'}\t{'PadName'}\t{'HeightLSL'}\t{'HeightUSL'}\t{'AreaLSL'}\t{'AreaUSL'}\t{'VolumeLSL'}\t{'VolumeUSL'}""")
-        self.update_status['Tolerance'].append(f"""
-{BoardID}\t{CompName}\t{PadName}\t{original['HeightLSL']} | {new['HeightLSL']}\t{original['HeightUSL']} | {new['HeightUSL']}\t{original['AreaLSL']} | {new['AreaLSL']}\t{original['AreaUSL']} | {new['AreaUSL']}\t{original['VolumeLSL']} | {new['VolumeLSL']}\t{original['VolumeUSL']} | {new['VolumeUSL']}""")
+        self.update_status['Tolerance'].append({"BoardID": BoardID,
+                                                "CompName": CompName,
+                                                "PadName": PadName,
+                                                "Original": original,
+                                                "New": new})
+
+
 
 
 

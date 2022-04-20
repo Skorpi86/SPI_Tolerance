@@ -6,15 +6,16 @@ from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from gui.gui import Main
 
 from db.SPI_data import DataFromSPI
-from db.tools import load_json
+from db.tools import load_json, load_txt_css
 
 
 class App:
     def __init__(self):
         self.MySQL_Thread = MySQL_Thread()
         self.main = Main()
-        self.main.window.setWindowTitle('SPI Tolerance [ v0.1 ][20220416]')
+        self.main.window.setWindowTitle('SPI Tolerance [ v0.1 ][20220420]')
         self.app_config = load_json('app_config.json')
+        self.app_css = load_txt_css('styles.css')
         self.current_tolerance = {}
         self.data_from_spi = DataFromSPI(app_config=self.app_config)
         self.run_app()
@@ -66,9 +67,39 @@ class App:
         if data.get("message"):
             self.main.message(f"{data['message'][0]}", data['message'][1])
         if data.get("update status"):
-            self.main.text_logs.append(f"Komponenty wybrane do aktualizacji:\n{', '.join(data['update status']['CompName'])}")
+            components_html = ""
+            if data['update status'].get('CompName'):
+                components_html += f"<p>{', '.join(data['update status'].get('CompName'))}</p>"
+
             if data['update status']['STATUS']:
-                self.main.text_logs.append('\n'.join(data['update status']['Tolerance']))
+                data_html = ""
+                for row in data['update status']['Tolerance']:
+                    if any([row['Original']['HeightLSL'] != row['New']['HeightLSL'],
+                            row['Original']['HeightUSL'] != row['New']['HeightUSL'],
+                            row['Original']['AreaLSL'] != row['New']['AreaLSL'],
+                            row['Original']['AreaUSL'] != row['New']['AreaUSL'],
+                            row['Original']['VolumeLSL'] != row['New']['VolumeLSL'],
+                            row['Original']['VolumeUSL'] != row['New']['VolumeUSL']]):
+                        status = "changed"
+                    else:
+                        status = "unchanged"
+
+                    data_html += f"<tr id='{status}'><td>{row['BoardID']}</td>" \
+                                 f"<td>{row['CompName']}</td>" \
+                                 f"<td>{row['PadName']}</td>" \
+                                 f"<td>{row['Original']['HeightLSL']}</td>" \
+                                 f"<td>{row['New']['HeightLSL']}</td>" \
+                                 f"<td>{row['Original']['HeightUSL']}</td>" \
+                                 f"<td>{row['New']['HeightUSL']}</td>" \
+                                 f"<td>{row['Original']['AreaLSL']}</td>" \
+                                 f"<td>{row['New']['AreaLSL']}</td>" \
+                                 f"<td>{row['Original']['AreaUSL']}</td>" \
+                                 f"<td>{row['New']['AreaUSL']}</td>" \
+                                 f"<td>{row['Original']['VolumeLSL']}</td>" \
+                                 f"<td>{row['New']['VolumeLSL']}</td>" \
+                                 f"<td>{row['Original']['VolumeUSL']}</td>" \
+                                 f"<td>{row['New']['VolumeUSL']}</td></tr>"
+                self.main.text_logs.setHtml(self.html_schema(components=components_html, data=data_html))
                 self.main.message('i', f"Pomyślnie zaktualizowano tolerancje pomiędzy projektami ({data['update status']['Statistic'].get('Changed')}/{data['update status']['Statistic'].get('All')}).")
             else:
                 self.main.message('w', 'Błąd podczas aktualizacji komponentów!!!')
@@ -79,6 +110,43 @@ class App:
         self.main.list_set_tolerance_to.setDisabled(status)
         self.main.tab_2.setDisabled(status)
         self.main.btn_synchronize.setDisabled(status)
+
+    def html_schema(self, components, data=""):
+        return f"""
+<html>
+<head>
+<style>
+{self.app_css}
+</style>
+</head>
+<body>
+
+<h1>Komponenty wybrane do aktualizacji:</h1>
+{components}
+<br>
+<h1>Raport z aktualizacji (oznaczone na żółto zostały zaktualizowane):</h1>
+<table>
+  <tr>
+    <th>BoardID</th>
+    <th>CompName</th>
+    <th>PadName</th>
+    <th>HeightLSL</th>
+    <th>HeightLSL<br>(NEW)</th>
+    <th>HeightUSL</th>
+    <th>HeightUSL<br>(NEW)</th>
+    <th>AreaLSL</th>
+    <th>AreaLSL<br>(NEW)</th>
+    <th>AreaUSL</th>
+    <th>AreaUSL<br>(NEW)</th>
+    <th>VolumeLSL</th>
+    <th>VolumeLSL<br>(NEW)</th>
+    <th>VolumeUSL</th>
+    <th>VolumeUSL<br>(NEW)</th>
+  </tr>
+  {data}
+</table>
+</body>
+</html>"""
 
 
 class MySQL_Thread(QThread):
