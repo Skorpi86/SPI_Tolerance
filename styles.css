@@ -34,10 +34,19 @@ td {
   font-size: 10px;
 }
 
-#changed {
-  background-color: yellow;
+.changed {
+  background-color: palegreen;
 }
 
-#unchanged {
+.unchanged {
   background-color: white;
+}
+
+.new_value {
+  color: darkgreen;
+  font-weight: bold;
+}
+
+.old_value {
+  color: red;
 }

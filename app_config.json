@@ -1,14 +1,9 @@
 {
   "skip_programs": [
     "information_schema",
-    "line_monitor",
-    "mysql",
-    "performance_schema",
-    "phpmyadmin",
-    "test"
+    "test",
+    "mysql"
   ],
-  "report_author": "",
-  "schema": 1,
   "project_settings": {},
   "library": {
     "DEFAULT_PART": {}

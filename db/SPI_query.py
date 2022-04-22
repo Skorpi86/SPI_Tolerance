@@ -26,21 +26,32 @@ def get_project_names_from_spi(**kwargs):
     """
     Pobiera listę programów z SPI
     """
-    from_json = kwargs.get("app_config")
     query = "SHOW DATABASES"
     response = get_query(query=query)
     if response:
-        if from_json:
-            ignore_projects = from_json.get("skip_programs")
-            if not ignore_projects:
-                ignore_projects = []
-        else:
-            ignore_projects = []
         projects = [project_name[0] for project_name in response if type(project_name) is tuple]
-        projects = [project_name for project_name in projects if project_name not in ignore_projects]
         return projects
     else:
         return []
+
+def check_tables_list(**kwargs):
+    """
+    Pobiera listę tabel w wybranej bazie danych
+    """
+    database = kwargs.get('database')
+    important_tables = kwargs.get('important_tables') if type(kwargs.get('important_tables')) is list else []
+    if not (database and important_tables):
+        return False
+
+    database_schema = get_query(database=database, query=f"SHOW TABLES")
+    if database_schema:
+        all_tables = [x[0] for x in database_schema if len(x) > 0]
+        for table_name in important_tables:
+            if table_name not in all_tables:
+                return False
+        return True
+    else:
+        return False
 
 
 def get_pad_info(**kwargs):
@@ -89,6 +100,7 @@ def get_pad_info(**kwargs):
 def update_pad_info(**kwargs):
     database = kwargs.get('database')
     pad_info_new = kwargs.get('pad_info')
+    progressBar = kwargs.get('progressBar')
     db_spi = mysql_con.connect_to_mysql(database=database)
     if pad_info_new:
         try:
@@ -98,6 +110,7 @@ def update_pad_info(**kwargs):
                 conditions = row['conditions']
                 query = f"UPDATE pad_info SET {values} WHERE {conditions}"
                 db_spi['cur'].execute(query)
+                progressBar['actual'] += 1
         except Exception as e:
             return False
         db_spi['con'].commit()

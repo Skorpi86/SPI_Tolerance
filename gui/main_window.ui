@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1050</width>
-    <height>520</height>
+    <height>522</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -53,6 +53,9 @@
    </property>
    <item>
     <widget class="QTabWidget" name="tabWidget">
+     <property name="enabled">
+      <bool>true</bool>
+     </property>
      <property name="font">
       <font>
        <family>Calibri</family>
@@ -60,6 +63,9 @@
      </property>
      <property name="currentIndex">
       <number>0</number>
+     </property>
+     <property name="tabsClosable">
+      <bool>false</bool>
      </property>
      <widget class="QWidget" name="tab">
       <attribute name="title">
@@ -170,7 +176,7 @@
          </property>
          <layout class="QHBoxLayout" name="horizontalLayout_10">
           <property name="bottomMargin">
-           <number>0</number>
+           <number>9</number>
           </property>
           <item>
            <widget class="QTextBrowser" name="text_logs">
@@ -261,6 +267,28 @@ p, li { white-space: pre-wrap; }
           <property name="bottomMargin">
            <number>0</number>
           </property>
+          <item>
+           <widget class="QProgressBar" name="progressBar">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>930</width>
+              <height>0</height>
+             </size>
+            </property>
+            <property name="value">
+             <number>24</number>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignCenter</set>
+            </property>
+           </widget>
+          </item>
           <item>
            <spacer name="horizontalSpacer_2">
             <property name="orientation">
@@ -359,12 +387,31 @@ Tolerance</string>
              </item>
              <item>
               <widget class="QComboBox" name="list_projet_name_library">
+               <property name="minimumSize">
+                <size>
+                 <width>400</width>
+                 <height>0</height>
+                </size>
+               </property>
                <property name="font">
                 <font>
                  <family>Calibri</family>
                 </font>
                </property>
               </widget>
+             </item>
+             <item>
+              <spacer name="horizontalSpacer_3">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
              </item>
             </layout>
            </widget>
@@ -513,12 +560,31 @@ Tolerance</string>
              </item>
              <item>
               <widget class="QComboBox" name="list_part_number">
+               <property name="minimumSize">
+                <size>
+                 <width>262</width>
+                 <height>0</height>
+                </size>
+               </property>
                <property name="font">
                 <font>
                  <family>Calibri</family>
                 </font>
                </property>
               </widget>
+             </item>
+             <item>
+              <spacer name="horizontalSpacer_4">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
              </item>
             </layout>
            </widget>
@@ -558,12 +624,31 @@ Tolerance</string>
              </item>
              <item>
               <widget class="QComboBox" name="list_PadName">
+               <property name="minimumSize">
+                <size>
+                 <width>154</width>
+                 <height>0</height>
+                </size>
+               </property>
                <property name="font">
                 <font>
                  <family>Calibri</family>
                 </font>
                </property>
               </widget>
+             </item>
+             <item>
+              <spacer name="horizontalSpacer_5">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
              </item>
             </layout>
            </widget>
