@@ -14,7 +14,7 @@ class App:
         self.MySQL_Thread = MySQL_Thread()
         self.ProgressBar_Thread = ProgressBar_Thread()
         self.main = Main()
-        self.main.window.setWindowTitle('SPI Tolerance [ v0.1 ][20220422]')
+        self.main.window.setWindowTitle('SPI Tolerance [ v0.1 ][20220423]')
         self.app_config = load_json('app_config.json')
         self.app_css = load_txt_css('styles.css')
         self.current_tolerance = {}
@@ -189,9 +189,11 @@ class MySQL_Thread(QThread):
         if self.project_name_with_correct_tolerance == self.new_project_name:
             self.finished.emit({"message": ("i", "Kopiowanie do tego samego projektu nie przyniesie rezultatu.")})
             return
-
-        self.data_from_spi.copy_pad_info_to_new_project(project_name_with_correct_tolerance=self.project_name_with_correct_tolerance, new_project_name=self.new_project_name)
-        self.finished.emit({"update status": self.data_from_spi.update_status})
+        try:
+            self.data_from_spi.copy_pad_info_to_new_project(project_name_with_correct_tolerance=self.project_name_with_correct_tolerance, new_project_name=self.new_project_name)
+            self.finished.emit({"update status": self.data_from_spi.update_status})
+        except Exception as e:
+            self.finished.emit({"message": ("w", f"Błąd podczas aktualizacji komponentów!!!\n{e}")})
 
 
 class ProgressBar_Thread(QThread):
@@ -212,7 +214,6 @@ class ProgressBar_Thread(QThread):
                 self.actual.emit(self.progressBar.get('actual'))
 
             time.sleep(0.01)
-
 
 
 if __name__ == '__main__':
