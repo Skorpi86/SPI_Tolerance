@@ -45,7 +45,8 @@ def create_table_part_number() -> bool:
     db_spi = mysql_con.connect_to_mysql(database='library')
     try:
         query = """ CREATE TABLE IF NOT EXISTS part_number (
-                    PartNumber char(100) NOT NULL PRIMARY KEY,
+                    ID INT AUTO_INCREMENT PRIMARY KEY,
+                    PartNumber char(100) NOT NULL,
                     PadName char(50),
                     Shape char(1),
                     Pattern smallint(6),

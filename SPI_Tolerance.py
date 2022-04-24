@@ -200,7 +200,10 @@ class MySQL_Thread(QThread):
             except Exception as e:
                 self.finished.emit({"message": ("w", f"Błąd podczas aktualizacji komponentów!!!\n{e}")})
         elif self.mode == 2:
-            self.data_from_spi.copy_part_number_tolerance_to_project(new_project_name=self.new_project_name, CompName=self.components)
+            try:
+                self.data_from_spi.copy_part_number_tolerance_to_project(new_project_name=self.new_project_name, CompName=self.components)
+            except Exception as e:
+                print(e)
 
 
 class ProgressBar_Thread(QThread):
