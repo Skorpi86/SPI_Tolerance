@@ -2,7 +2,8 @@
   "skip_programs": [
     "information_schema",
     "test",
-    "mysql"
+    "mysql",
+    "library"
   ],
   "project_settings": {},
   "library": {

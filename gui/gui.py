@@ -72,6 +72,20 @@ class Main(Ui_main, Window):
         self.setupUi(self.window)
         self.add_CompName_combobox(self.widget_CompName_library)
         self.load_settings()
+        self.__main_connection()
+
+    def __main_connection(self):
+        self.tabWidget.currentChanged.connect(self.__change_window_size)
+
+    def __change_window_size(self):
+        self.text_logs.clear()
+        if self.tabWidget.currentIndex() == 0:
+            self.window.setMinimumWidth(1050)
+            self.window.setMaximumWidth(1050)
+        elif self.tabWidget.currentIndex() == 1:
+            self.window.setMinimumWidth(720)
+            self.window.setMaximumWidth(720)
+
 
 
 class CheckableComboBox(QComboBox):

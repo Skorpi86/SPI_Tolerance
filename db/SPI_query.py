@@ -22,6 +22,208 @@ def get_query(**kwargs):
     return response
 
 
+def create_database_library() -> bool:
+    """
+    Tworzy bazę danych o nazwię: library
+    """
+    db_spi = mysql_con.connect_to_mysql()
+    try:
+        query = 'CREATE DATABASE IF NOT EXISTS library'
+        db_spi['cur'].execute(query)
+    except:
+        mysql_con.disconnect_mysql()
+        return False
+    db_spi['con'].commit()
+    mysql_con.disconnect_mysql()
+    return True
+
+
+def create_table_part_number() -> bool:
+    """
+    Tworzy tabele: part_number w bazie library
+    """
+    db_spi = mysql_con.connect_to_mysql(database='library')
+    try:
+        query = """ CREATE TABLE IF NOT EXISTS part_number (
+                    PartNumber char(100) NOT NULL PRIMARY KEY,
+                    PadName char(50),
+                    Shape char(1),
+                    Pattern smallint(6),
+                    PosX float,
+                    PosY float,
+                    SizeX float,
+                    SizeY float,
+                    Angle float,
+                    Vertex text,
+                    VertexCount int(11),
+                    WeightOffsetX float,
+                    WeightOffsetY float,
+                    OriginalHeight float,
+                    OriginalArea float,
+                    Height float,
+                    Area float,
+                    Volume float,
+                    Status int(11),
+                    LocalFidIndex char(20),
+                    IsNoUse tinyint(1),
+                    IsInspHeight tinyint(1),
+                    IsInspArea tinyint(1),
+                    IsInspVolume tinyint(1),
+                    IsInspOffset tinyint(1),
+                    IsInspBridge tinyint(1),
+                    IsInspShape tinyint(1),
+                    IsInspClearance tinyint(1),
+                    HeightUSL float,
+                    HeightLSL float,
+                    AreaUSL float,
+                    AreaLSL float,
+                    VolumeUSL float,
+                    VolumeLSL float,
+                    HeightWarning float,
+                    AreaWarning float,
+                    VolumeWarning float,
+                    OffsetXSpec float,
+                    OffsetYSpec float,
+                    OffsetXWarning float,
+                    OffsetYWarning float,
+                    BridgeInspDir tinyint(3) unsigned,
+                    BridgeDetectH float,
+                    BridgeDetectL float,
+                    ShapeSolderFlatness float,
+                    BBTOffset float,
+                    PadOffset float,
+                    AlgMaskLower float,
+                    AlgMaskUpper float,
+                    AlgWindowSize float,
+                    AlgExtendSize float,
+                    AlgThreshold float,
+                    AlgBaseRatio float,
+                    AlgPadThreshold float,
+                    AlgPadExtend float,
+                    AlgHeightLimit float,
+                    AlgAreaLimit float,
+                    AlgVolumeLimit float,
+                    OverNGHeightUSL float,
+                    OverNGHeightLSL float,
+                    OverNGAreaUSL float,
+                    OverNGAreaLSL float,
+                    OverNGVolumeUSL float,
+                    OverNGVolumeLSL float,
+                    OverNGOffsetXSpec float,
+                    OverNGOffsetYSpec float,
+                    Type int(11),
+                    HeightTolUnit int(11),
+                    OffsetTolUnit int(11),
+                    OverNGTolType int(11),
+                    HeightWarningUpper float,
+                    AreaWarningUpper float,
+                    VolumeWarningUpper float )"""
+        db_spi['cur'].execute(query)
+    except:
+        mysql_con.disconnect_mysql()
+        return False
+    db_spi['con'].commit()
+    mysql_con.disconnect_mysql()
+    return True
+
+
+def get_part_number(**kwargs):
+    """
+    Pobiera informację z tabeli part_number (library)
+    """
+    important_columns = ['PartNumber', 'PadName', 'HeightUSL', 'HeightLSL', 'AreaUSL', 'AreaLSL', 'VolumeUSL', 'VolumeLSL', 'IsNoUse', 'IsInspHeight', 'IsInspArea', 'IsInspVolume', 'IsInspOffset', 'IsInspBridge', 'BridgeInspDir', 'BridgeDetectH', 'BridgeDetectL', 'OffsetXSpec', 'OffsetYSpec']
+    PartNumber = kwargs.get('PartNumber')
+    PadName = kwargs.get('PadName')
+    if not PartNumber:
+        return False
+    database = "library"
+    table_name = "part_number"
+    columns = kwargs.get('columns')
+    if not columns:
+        table_schema = get_query(database=database, query=f"SHOW COLUMNS from {table_name}")
+        if table_schema:
+            columns = [x[0] for x in table_schema if len(x) > 0]
+    if not columns:
+        return []
+    conditions = f"PartNumber='{PartNumber}' AND PadName='{PadName}'"
+    query = create_select_query(columns=columns, table_name=table_name, conditions=conditions)
+    response = get_query(database=database, query=query)
+    part_number = []
+    if response:
+        for row in response:
+            part_number_row = {}
+            for i, column_name in enumerate(columns):
+                if column_name not in important_columns:
+                    continue
+                part_number_row.update({column_name: row[i]})
+            part_number.append(part_number_row)
+        return part_number[0]
+    else:
+        return False
+
+
+def insert_part_number(**kwargs):
+    """
+    Zapisuje w bazie danych library tolerancję dla wskazanych PartNumber
+    """
+    tolerance = kwargs.get('tolerance')
+    if not tolerance:
+        return False
+    insert = []
+    update = []
+    status = {'insert': [], 'update': []}
+    for row in tolerance:
+        actual_part_number = get_part_number(PartNumber=row['PartNumber'], PadName=row['PadName'])
+        if actual_part_number:
+            update.append(row)
+            continue
+        else:
+            insert.append(row)
+    status['insert'].append(len(insert))
+    status['update'].append(len(update))
+    if update:
+        status['update'].append(update_part_number(tolerance=update))
+    else:
+        status['update'].append(None)
+    if insert:
+        try:
+            column_names = ', '.join(insert[0].keys())
+            values = []
+            query = f"INSERT INTO part_number ({column_names}) VALUES ({'%s, ' * (len(insert[0].keys()) - 1)}%s)"
+            for row in insert:
+                values.append(tuple(row.values()))
+            db_spi = mysql_con.connect_to_mysql(database='library')
+            db_spi['cur'].executemany(query, values)
+        except:
+            mysql_con.disconnect_mysql()
+            status['insert'].append(False)
+            return status
+        db_spi['con'].commit()
+        mysql_con.disconnect_mysql()
+        status['insert'].append(True)
+        return status
+    else:
+        status['insert'].append(None)
+        return status
+
+
+def update_part_number(**kwargs):
+    tolerance = kwargs.get('tolerance')
+    db_spi = mysql_con.connect_to_mysql(database='library')
+    try:
+        for row in tolerance:
+            values = ', '.join([f"{k}={v}" for k, v in row.items() if k not in ['PartNumber', 'PadName']])
+            conditions = f"PartNumber={row['PartNumber']} AND PadName={row['PadName']}"
+            query = f"UPDATE part_number SET {values} WHERE {conditions}"
+            db_spi['cur'].execute(query)
+    except Exception as e:
+        mysql_con.disconnect_mysql()
+        return False
+    db_spi['con'].commit()
+    mysql_con.disconnect_mysql()
+    return True
+
+
 def get_project_names_from_spi(**kwargs):
     """
     Pobiera listę programów z SPI
@@ -33,6 +235,7 @@ def get_project_names_from_spi(**kwargs):
         return projects
     else:
         return []
+
 
 def check_tables_list(**kwargs):
     """
@@ -119,17 +322,29 @@ def update_pad_info(**kwargs):
         return False
 
 
-
 def get_comp_info(**kwargs):
     """
     Pobiera informację z tabeli comp_info
     """
     database = kwargs.get('database')
     if not database:
-        return
+        return False
+    chosen_components = kwargs.get('CompName')
+    conditions = ""
+    if chosen_components:
+        chosen_components = tuple(chosen_components) if type(chosen_components) in [list, tuple] else (chosen_components,)
+        if len(chosen_components) == 1:
+            conditions1 = f"CompName='{str(chosen_components[0])}'"
+        elif len(chosen_components) > 1:
+            conditions1 = f"CompName IN {str(chosen_components)}"
+        else:
+            conditions1 = False
+    else:
+        conditions1 = False
+    conditions += conditions1 if conditions1 else conditions
     columns = ["CompID", "CompName", "CompCode"]
     table_name = "comp_info"
-    query = create_select_query(columns=columns, table_name=table_name)
+    query = create_select_query(columns=columns, table_name=table_name, conditions=conditions)
     response = get_query(database=database, query=query)
     comp_info = []
     if response:
@@ -140,7 +355,7 @@ def get_comp_info(**kwargs):
             comp_info.append(comp_info_row)
         return comp_info
     else:
-        return
+        return False
 
 
 def get_panel_insp_result(**kwargs):
@@ -174,7 +389,7 @@ def get_panel_insp_result(**kwargs):
             conditions += " AND"
         conditions += conditions_2
     if not database:
-        return
+        return False
     columns = ["InspPanelIndex", "InspectDate", "ResultCode", "OperatorID", "SqueegeeDir"]
     table_name = "panel_insp_result"
     query = create_select_query(columns=columns, table_name=table_name, conditions=conditions)

@@ -14,7 +14,7 @@ class App:
         self.MySQL_Thread = MySQL_Thread()
         self.ProgressBar_Thread = ProgressBar_Thread()
         self.main = Main()
-        self.main.window.setWindowTitle('SPI Tolerance [ v0.1 ][20220423]')
+        self.main.window.setWindowTitle('SPI Tolerance [ v0.2 ][20220424]')
         self.app_config = load_json('app_config.json')
         self.app_css = load_txt_css('styles.css')
         self.current_tolerance = {}
@@ -23,7 +23,6 @@ class App:
         self.run_app()
 
     def run_app(self):
-        self.main.tab_2.setDisabled(True)
         self.app_connection()
         self.clear_progressBar()
         self.ProgressBar_Thread.progressBar = self.progressBar
@@ -60,13 +59,17 @@ class App:
     def synchronize_tolerance_between_projects(self):
         self.lock_app(True)
         self.main.text_logs.clear()
+        self.MySQL_Thread.mode = 1
         self.MySQL_Thread.project_name_with_correct_tolerance = self.main.list_get_tolerance_from.currentText()
         self.MySQL_Thread.new_project_name = self.main.list_set_tolerance_to.currentText()
         self.MySQL_Thread.start()
 
     def synchronize_tolerance_between_project_and_library(self):
         choosen_components = self.get_components_from_list()
-        print(choosen_components)
+        self.MySQL_Thread.mode = 2
+        self.MySQL_Thread.components = choosen_components
+        self.MySQL_Thread.new_project_name = self.main.list_projet_name_library.currentText()
+        self.MySQL_Thread.start()
 
     def get_components_from_list(self):
         return [self.main.CompName.itemText(x) for x in range(self.main.CompName.count()) if self.main.CompName.itemChecked(x) is True]
@@ -123,7 +126,7 @@ class App:
     def lock_app(self, status):
         self.main.list_get_tolerance_from.setDisabled(status)
         self.main.list_set_tolerance_to.setDisabled(status)
-        # self.main.tab_2.setDisabled(status)
+        self.main.tab_2.setDisabled(status)
         self.main.btn_synchronize.setDisabled(status)
 
     def html_schema(self, components, data=""):
@@ -184,16 +187,20 @@ class MySQL_Thread(QThread):
     components = []
     tolerance_from_library = []
     board_informations = None
+    mode = None
 
     def run(self) -> None:
-        if self.project_name_with_correct_tolerance == self.new_project_name:
-            self.finished.emit({"message": ("i", "Kopiowanie do tego samego projektu nie przyniesie rezultatu.")})
-            return
-        try:
-            self.data_from_spi.copy_pad_info_to_new_project(project_name_with_correct_tolerance=self.project_name_with_correct_tolerance, new_project_name=self.new_project_name)
-            self.finished.emit({"update status": self.data_from_spi.update_status})
-        except Exception as e:
-            self.finished.emit({"message": ("w", f"Błąd podczas aktualizacji komponentów!!!\n{e}")})
+        if self.mode == 1:
+            if self.project_name_with_correct_tolerance == self.new_project_name:
+                self.finished.emit({"message": ("i", "Kopiowanie do tego samego projektu nie przyniesie rezultatu.")})
+                return
+            try:
+                self.data_from_spi.copy_pad_info_to_new_project(project_name_with_correct_tolerance=self.project_name_with_correct_tolerance, new_project_name=self.new_project_name)
+                self.finished.emit({"update status": self.data_from_spi.update_status})
+            except Exception as e:
+                self.finished.emit({"message": ("w", f"Błąd podczas aktualizacji komponentów!!!\n{e}")})
+        elif self.mode == 2:
+            self.data_from_spi.copy_part_number_tolerance_to_project(new_project_name=self.new_project_name, CompName=self.components)
 
 
 class ProgressBar_Thread(QThread):

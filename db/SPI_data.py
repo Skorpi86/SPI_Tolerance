@@ -1,7 +1,7 @@
 import copy
 import pprint
 
-from db.SPI_query import get_comp_info, get_pad_info, get_project_names_from_spi, update_pad_info, check_tables_list
+from db.SPI_query import get_comp_info, get_pad_info, get_project_names_from_spi, update_pad_info, check_tables_list, create_database_library, create_table_part_number, get_part_number, insert_part_number
 from db.mysql_con import connect_to_mysql
 from db.tools import comp_code_fixer, compare_components, the_same_tolerance, save_json
 
@@ -29,6 +29,11 @@ class DataFromSPI:
     def get_program_list(self):
         good_program_name = []
         all_programs = get_project_names_from_spi()
+        if 'library' not in all_programs:
+            db_library_created = create_database_library()
+            if db_library_created:
+                create_table_part_number()
+
         skip_programs = self.get_ignore_program_list()
         save_skip_programs = False
         for program in all_programs:
@@ -53,9 +58,9 @@ class DataFromSPI:
                 skip_programs = self.app_config.get("skip_programs") if self.app_config.get("skip_programs") is not None else []
         return skip_programs
 
-
     def prepare_comp_info(self, **kwargs):
         database = kwargs.get('database')
+        choosen_components = kwargs.get('CompName')
         get_new = kwargs.get('get_new')
         if not database:
             return False
@@ -63,7 +68,7 @@ class DataFromSPI:
             comp_info = self.buffer[database].get("comp_info")
             if comp_info:
                 return comp_info
-        comp_info_original = get_comp_info(database=database)
+        comp_info_original = get_comp_info(database=database, CompName=choosen_components)
         if not comp_info_original:
             self.update_status['messages'].append(('w', f"Program: {database}\nBłąd podczas pobierania informacji z tabeli: comp_info"))
             return False
@@ -86,6 +91,7 @@ class DataFromSPI:
 
     def prepare_pad_info(self, **kwargs):
         database = kwargs.get('database')
+        choosen_components = kwargs.get('CompID')
         get_new = kwargs.get('get_new')
         if not database:
             return False
@@ -93,7 +99,7 @@ class DataFromSPI:
             pad_info = self.buffer[database].get("pad_info")
             if pad_info:
                 return pad_info
-        pad_info_original = get_pad_info(database=database)
+        pad_info_original = get_pad_info(database=database, CompID=choosen_components)
         if not pad_info_original:
             self.update_status['messages'].append(('w', f"Program:{database}\nBłąd podczas pobierania informacji z tabeli: pad_info"))
             return False
@@ -126,11 +132,14 @@ class DataFromSPI:
         return pad_info
 
     def get_project_info(self, database, **kwargs):
+        choosen_components = kwargs.get('CompName')
         get_new = kwargs.get('get_new')
-        comp_info = self.prepare_comp_info(database=database, get_new=get_new)
-        pad_info = self.prepare_pad_info(database=database, get_new=get_new)
-
-        if not (comp_info and pad_info):
+        comp_info = self.prepare_comp_info(database=database, get_new=get_new, CompName=choosen_components)
+        if not comp_info:
+            return
+        choosen_components_id = [comp_info['CompID'].get(x) for x in choosen_components] if choosen_components else []
+        pad_info = self.prepare_pad_info(database=database, get_new=get_new, CompID=choosen_components_id)
+        if not pad_info:
             return False
 
         project_info = {
@@ -168,7 +177,6 @@ class DataFromSPI:
     def get_the_same_CompName(self, project_with_correct_tolerance, new_project):
         CompName_with_correct_tolerance = project_with_correct_tolerance["comp_info"]["CompID"].keys()
         all_CompName = new_project["comp_info"]["CompID"].keys()
-        self.update_status['Statistic'].update({"All": len(all_CompName)})
         the_same_CompName = {"project_with_correct_tolerance": {}, "new_project": {}, "CompName": []}
         if CompName_with_correct_tolerance and all_CompName:
             compare = [x for x in CompName_with_correct_tolerance if x in all_CompName]
@@ -217,7 +225,8 @@ class DataFromSPI:
                 })
             self.prepare_tolerance_to_show_in_logs(BoardID=row['BoardID'], CompName=CompName, PadName=row['PadName'], original=row, new=correct_tolerance)
         self.update_status["CompName"] = verifed_CompName.copy()
-        self.update_status['Statistic'].update({"Changed": len(verifed_CompName)})
+        self.update_status['Statistic'].update({"Changed": len(pad_info_to_update)})
+        self.update_status['Statistic'].update({"All": len(self.update_status['Tolerance'])})
         self.progressBar['max'] = len(pad_info_to_update) + int(0.01 * len(pad_info_to_update))
         return pad_info_to_update
 
@@ -234,6 +243,61 @@ class DataFromSPI:
                                                 "PadName": PadName,
                                                 "Original": original,
                                                 "New": new})
+
+    def copy_part_number_tolerance_to_project(self, **kwargs):
+        new_project_name = kwargs.get("new_project_name")
+        choosen_components = kwargs.get("CompName")
+        project_info = self.get_project_info(database=new_project_name, CompName=choosen_components, get_new=True)
+        data_to_synchronization = {'save_in_library': [], 'update_project': []}
+        DEFAULT_PART = get_part_number(PartNumber='DEFAULT_PART', PadName='ALL')
+        for row in project_info['pad_info']['pad_info_original']:
+            PartNumber = project_info['comp_info']['CompCode'].get(row['CompID'])
+            if PartNumber == 'DEFAULT_PART' and DEFAULT_PART:
+                part_number_tolerance = copy.deepcopy(DEFAULT_PART)
+            else:
+                part_number_tolerance = get_part_number(PartNumber=PartNumber, PadName=row['PadName'])
+            if part_number_tolerance:
+                part_number_tolerance.pop('PartNumber')
+                part_number_tolerance.pop('PadName')
+                data_to_synchronization['update_project'].append({
+                    'conditions': f"BoardID={row['BoardID']} AND CompID={row['CompID']} AND PadName=\'{row['PadName']}\'",
+                    'correct_tolerance': part_number_tolerance
+                })
+            else:
+                tolerance = {k: v for k, v in row.items() if k not in ['BoardID', 'PadID', 'CompID']}
+                tolerance.update({'PartNumber': PartNumber})
+                if PartNumber == 'DEFAULT_PART':
+                    tolerance.update({'PadName': 'ALL'})
+                    DEFAULT_PART = copy.deepcopy(tolerance)
+                PartNumber_to_save_in_library = [x['PartNumber'] for x in data_to_synchronization['save_in_library']]
+                PadName_to_save_in_library = [x['PadName'] for x in data_to_synchronization['save_in_library'] if x['PartNumber'] == PartNumber]
+                if PartNumber not in PartNumber_to_save_in_library or (PartNumber in PartNumber_to_save_in_library and tolerance['PadName'] not in PadName_to_save_in_library):
+                    data_to_synchronization['save_in_library'].append(tolerance)
+
+        if data_to_synchronization['save_in_library']:
+            # Nie działa insert dla wielu wierszy
+            insert_part_number(tolerance=data_to_synchronization['save_in_library'])
+        if data_to_synchronization['update_project']:
+            pass
+
+    def __new_part_number(self):
+        return {'AreaLSL': 20.0,
+                'AreaUSL': 200.0,
+                'BridgeDetectH': 80.0,
+                'BridgeDetectL': 60.0,
+                'BridgeInspDir': 255,
+                'HeightLSL': 50.0,
+                'HeightUSL': 250.0,
+                'IsInspArea': 1,
+                'IsInspBridge': 1,
+                'IsInspHeight': 1,
+                'IsInspOffset': 1,
+                'IsInspVolume': 1,
+                'IsNoUse': 0,
+                'OffsetXSpec': 0.5,
+                'OffsetYSpec': 0.5,
+                'VolumeLSL': 20.0,
+                'VolumeUSL': 220.0}
 
 
 
