@@ -135,18 +135,18 @@ def get_part_number(**kwargs):
     important_columns = ['PartNumber', 'PadName', 'HeightUSL', 'HeightLSL', 'AreaUSL', 'AreaLSL', 'VolumeUSL', 'VolumeLSL', 'IsNoUse', 'IsInspHeight', 'IsInspArea', 'IsInspVolume', 'IsInspOffset', 'IsInspBridge', 'BridgeInspDir', 'BridgeDetectH', 'BridgeDetectL', 'OffsetXSpec', 'OffsetYSpec']
     PartNumber = kwargs.get('PartNumber')
     PadName = kwargs.get('PadName')
-    if not PartNumber:
-        return False
     database = "library"
     table_name = "part_number"
     columns = kwargs.get('columns')
+    conditions = ""
     if not columns:
         table_schema = get_query(database=database, query=f"SHOW COLUMNS from {table_name}")
         if table_schema:
             columns = [x[0] for x in table_schema if len(x) > 0]
     if not columns:
         return []
-    conditions = f"PartNumber='{PartNumber}' AND PadName='{PadName}'"
+    if PartNumber and PadName:
+        conditions = f"PartNumber='{PartNumber}' AND PadName='{PadName}'"
     query = create_select_query(columns=columns, table_name=table_name, conditions=conditions)
     response = get_query(database=database, query=query)
     part_number = []
@@ -158,7 +158,10 @@ def get_part_number(**kwargs):
                     continue
                 part_number_row.update({column_name: row[i]})
             part_number.append(part_number_row)
-        return part_number[0]
+        if PartNumber and PadName:
+            return part_number[0]
+        else:
+            return part_number
     else:
         return False
 
@@ -176,7 +179,8 @@ def insert_part_number(**kwargs):
     for row in tolerance:
         actual_part_number = get_part_number(PartNumber=row['PartNumber'], PadName=row['PadName'])
         if actual_part_number:
-            update.append(row)
+            if actual_part_number != row:
+                update.append(row)
             continue
         else:
             insert.append(row)
@@ -214,7 +218,7 @@ def update_part_number(**kwargs):
     try:
         for row in tolerance:
             values = ', '.join([f"{k}={v}" for k, v in row.items() if k not in ['PartNumber', 'PadName']])
-            conditions = f"PartNumber={row['PartNumber']} AND PadName={row['PadName']}"
+            conditions = f"PartNumber='{row['PartNumber']}' AND PadName='{row['PadName']}'"
             query = f"UPDATE part_number SET {values} WHERE {conditions}"
             db_spi['cur'].execute(query)
     except Exception as e:

@@ -58,6 +58,38 @@ class DataFromSPI:
                 skip_programs = self.app_config.get("skip_programs") if self.app_config.get("skip_programs") is not None else []
         return skip_programs
 
+    def prepare_part_number_from_library(self, **kwargs):
+        self.buffer['library'] = {}
+        part_number = {}
+        response = get_part_number()
+        if response:
+            for row in response:
+                PartNumber = row.pop('PartNumber')
+                PadName = row.pop('PadName')
+                if not part_number.get(PartNumber):
+                    part_number.update({PartNumber: {PadName: row}})
+                elif not part_number[PartNumber].get(PadName):
+                    part_number[PartNumber].update({PadName: row})
+        if part_number:
+            self.buffer['library'] = part_number
+
+    def save_current_tolerance_in_library(self, PartNumber, PadName, tolerance):
+        old_tolerance = {}
+        if self.buffer['library'].get(PartNumber):
+            old_tolerance = self.buffer['library'][PartNumber].get(PadName)
+        if old_tolerance == tolerance:
+            return {'message': ('i', f'W bazie danych są już takie same wartości dla:\n{PartNumber} - wyprowadzenie: {PadName}')}
+        else:
+            tolerance.update({'PartNumber': PartNumber, 'PadName': PadName})
+            status = insert_part_number(tolerance=[tolerance])
+            if status['update'][-1]:
+                tolerance.pop('PartNumber')
+                tolerance.pop('PadName')
+                self.buffer['library'][PartNumber][PadName] = tolerance
+                return {'message': ('i', f"Pomyślnie zaktualizowano wartości dla:\n{PartNumber} - wyprowadzenie: {PadName}")}
+            else:
+                return {'message': ('w', f"Nie udało sie zaktualizować wartości dla:\n{PartNumber} - wyprowadzenie: {PadName} !!!")}
+
     def prepare_comp_info(self, **kwargs):
         database = kwargs.get('database')
         choosen_components = kwargs.get('CompName')
@@ -259,6 +291,8 @@ class DataFromSPI:
             if part_number_tolerance:
                 part_number_tolerance.pop('PartNumber')
                 part_number_tolerance.pop('PadName')
+                if all([part_number_tolerance[k] == row[k] for k in part_number_tolerance.keys()]):
+                    continue
                 data_to_synchronization['update_project'].append({
                     'conditions': f"BoardID={row['BoardID']} AND CompID={row['CompID']} AND PadName=\'{row['PadName']}\'",
                     'correct_tolerance': part_number_tolerance
@@ -275,7 +309,6 @@ class DataFromSPI:
                     data_to_synchronization['save_in_library'].append(tolerance)
 
         if data_to_synchronization['save_in_library']:
-            # Nie działa insert dla wielu wierszy
             insert_part_number(tolerance=data_to_synchronization['save_in_library'])
         if data_to_synchronization['update_project']:
             pass

@@ -1,3 +1,4 @@
+import copy
 import time
 import sys
 from PyQt5.QtWidgets import QApplication
@@ -14,7 +15,7 @@ class App:
         self.MySQL_Thread = MySQL_Thread()
         self.ProgressBar_Thread = ProgressBar_Thread()
         self.main = Main()
-        self.main.window.setWindowTitle('SPI Tolerance [ v0.2 ][20220424]')
+        self.main.window.setWindowTitle('SPI Tolerance [ v0.2 ][20220425]')
         self.app_config = load_json('app_config.json')
         self.app_css = load_txt_css('styles.css')
         self.current_tolerance = {}
@@ -37,6 +38,7 @@ class App:
             self.main.list_set_tolerance_to.addItems(program_list)
             self.main.list_projet_name_library.addItems(program_list)
             self.add_CompName_to_components_list()
+            self.fill_part_number_in_library()
             self.MySQL_Thread.data_from_spi = self.data_from_spi
         self.main.show()
 
@@ -48,6 +50,86 @@ class App:
         self.MySQL_Thread.finished.connect(self.mysql_update)
         self.ProgressBar_Thread.actual.connect(self.update_progressBar)
         self.ProgressBar_Thread.max.connect(self.set_max_value_in_progressBar)
+        self.main.CompName.currentIndexChanged.connect(self.show_part_number_to_current_component)
+        self.main.list_part_number.currentIndexChanged.connect(self.add_Padname_to_current_part_number)
+        self.main.list_PadName.currentIndexChanged.connect(self.add_Tolerance_to_current_PadName)
+        self.main.btn_save_library.clicked.connect(self.save_tolerance_in_library)
+
+    def show_part_number_to_current_component(self):
+        self.main.label_current_component.clear()
+        part_number = ""
+        current_CompName = self.main.CompName.currentText()
+        if current_CompName:
+            comp_info = self.data_from_spi.prepare_comp_info(database=self.main.list_projet_name_library.currentText())
+            if comp_info:
+                CompID = comp_info['CompID'].get(current_CompName)
+                part_number = comp_info['CompCode'].get(CompID)
+        self.main.label_current_component.setText(part_number)
+
+    def fill_part_number_in_library(self):
+        self.main.list_part_number.clear()
+        self.data_from_spi.prepare_part_number_from_library()
+        if self.data_from_spi.buffer.get('library'):
+            self.main.list_part_number.addItems([str(x) for x in self.data_from_spi.buffer['library'].keys() if x is not None])
+            self.add_Padname_to_current_part_number()
+            self.add_Tolerance_to_current_PadName()
+
+    def add_Padname_to_current_part_number(self):
+        self.main.list_PadName.clear()
+        if self.main.list_part_number.currentText():
+            part_number = self.main.list_part_number.currentText()
+            if self.data_from_spi.buffer.get('library'):
+                self.main.list_PadName.addItems([str(x) for x in self.data_from_spi.buffer['library'][part_number].keys() if x is not None])
+
+    def add_Tolerance_to_current_PadName(self):
+        self.fill_default_Tolerance()
+        if self.main.list_PadName.currentText():
+            Padname = self.main.list_PadName.currentText()
+            PartNumber = self.main.list_part_number.currentText()
+            if self.data_from_spi.buffer.get('library'):
+                values = self.data_from_spi.buffer['library'][PartNumber].get(Padname)
+                if values:
+                    self.main.HeightLSL.setValue(values['HeightLSL'])
+                    self.main.HeightUSL.setValue(values['HeightUSL'])
+                    self.main.AreaLSL.setValue(values['AreaLSL'])
+                    self.main.AreaUSL.setValue(values['AreaUSL'])
+                    self.main.VolumeLSL.setValue(values['VolumeLSL'])
+                    self.main.VolumeUSL.setValue(values['VolumeUSL'])
+                    self.main.checkBox_bridge.setChecked(bool(values['IsInspBridge']))
+
+    def fill_default_Tolerance(self):
+        self.main.HeightLSL.setValue(0)
+        self.main.HeightUSL.setValue(0)
+        self.main.AreaLSL.setValue(0)
+        self.main.AreaUSL.setValue(0)
+        self.main.VolumeLSL.setValue(0)
+        self.main.VolumeUSL.setValue(0)
+        self.main.checkBox_bridge.setChecked(False)
+
+    def save_tolerance_in_library(self):
+        tolerance = {}
+        status = {}
+        if self.data_from_spi.buffer.get('library'):
+            Padname = self.main.list_PadName.currentText()
+            PartNumber = self.main.list_part_number.currentText()
+            if self.data_from_spi.buffer['library'].get(PartNumber):
+                tolerance = copy.deepcopy(self.data_from_spi.buffer['library'][PartNumber].get(Padname))
+            if tolerance:
+                bridge = 1 if self.main.checkBox_bridge.isChecked() else 0
+                tolerance.update({
+                    'HeightLSL': self.main.HeightLSL.value(),
+                    'HeightUSL': self.main.HeightUSL.value(),
+                    'AreaLSL': self.main.AreaLSL.value(),
+                    'AreaUSL': self.main.AreaUSL.value(),
+                    'VolumeLSL': self.main.VolumeLSL.value(),
+                    'VolumeUSL': self.main.VolumeUSL.value(),
+                    'IsInspBridge': bridge})
+
+                status = self.data_from_spi.save_current_tolerance_in_library(PartNumber=PartNumber, PadName=Padname, tolerance=tolerance)
+
+        if status.get('message'):
+            self.main.message(status['message'][0], status['message'][1])
+
 
     def add_CompName_to_components_list(self):
         database = self.main.list_projet_name_library.currentText()
@@ -65,6 +147,7 @@ class App:
         self.MySQL_Thread.start()
 
     def synchronize_tolerance_between_project_and_library(self):
+        self.lock_app(True, library=True)
         choosen_components = self.get_components_from_list()
         self.MySQL_Thread.mode = 2
         self.MySQL_Thread.components = choosen_components
@@ -120,10 +203,21 @@ class App:
                         self.main.message(i, message)
                 else:
                     self.main.message('w', 'Błąd podczas aktualizacji komponentów!!!')
-        self.lock_app(False)
-        self.clear_progressBar()
+        if self.MySQL_Thread.mode == 1:
+            self.lock_app(False)
+            self.clear_progressBar()
+        elif self.MySQL_Thread.mode == 2:
+            self.lock_app(False, library=True)
 
-    def lock_app(self, status):
+    def lock_app(self, status, **kwargs):
+        if kwargs.get('library'):
+            self.main.tab.setDisabled(status)
+            self.main.btn_save_library.setDisabled(status)
+            self.main.list_projet_name_library.setDisabled(status)
+            self.main.CompName.setDisabled(status)
+            self.main.list_PadName.setDisabled(status)
+            self.main.list_part_number.setDisabled(status)
+            self.main.frame_tolerance.setDisabled(status)
         self.main.list_get_tolerance_from.setDisabled(status)
         self.main.list_set_tolerance_to.setDisabled(status)
         self.main.tab_2.setDisabled(status)
@@ -198,12 +292,13 @@ class MySQL_Thread(QThread):
                 self.data_from_spi.copy_pad_info_to_new_project(project_name_with_correct_tolerance=self.project_name_with_correct_tolerance, new_project_name=self.new_project_name)
                 self.finished.emit({"update status": self.data_from_spi.update_status})
             except Exception as e:
-                self.finished.emit({"message": ("w", f"Błąd podczas aktualizacji komponentów!!!\n{e}")})
+                self.finished.emit({"message": ("w", f"Błąd podczas synchronizacji komponentów!!!\n{e}")})
         elif self.mode == 2:
             try:
                 self.data_from_spi.copy_part_number_tolerance_to_project(new_project_name=self.new_project_name, CompName=self.components)
+                self.finished.emit({"message": ("i", "Pomyślnie zakończono synchronizację")})
             except Exception as e:
-                print(e)
+                self.finished.emit({"message": ("w", f"Błąd podczas synchronizacji komponentów!!!\n{e}")})
 
 
 class ProgressBar_Thread(QThread):
