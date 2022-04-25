@@ -43,10 +43,11 @@ td {
 }
 
 .new_value {
-  color: darkgreen;
+  color: red;
   font-weight: bold;
 }
 
 .old_value {
-  color: red;
+  color: darkblue;
+  font-weight: bold;
 }
