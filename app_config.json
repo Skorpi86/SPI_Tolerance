@@ -4,9 +4,5 @@
     "test",
     "mysql",
     "library"
-  ],
-  "project_settings": {},
-  "library": {
-    "DEFAULT_PART": {}
-  }
+  ]
 }

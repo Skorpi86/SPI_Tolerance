@@ -1,8 +1,7 @@
-import copy
 import time
 import sys
 from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtCore import QThread, pyqtSignal
 
 from gui.gui import Main
 
@@ -15,7 +14,7 @@ class App:
         self.MySQL_Thread = MySQL_Thread()
         self.ProgressBar_Thread = ProgressBar_Thread()
         self.main = Main()
-        self.main.window.setWindowTitle('SPI Tolerance [ v0.2 ][20220425]')
+        self.main.window.setWindowTitle('SPI Tolerance [ v0.2 ][20220430]')
         self.app_config = load_json('app_config.json')
         self.app_css = load_txt_css('styles.css')
         self.current_tolerance = {}
@@ -28,146 +27,38 @@ class App:
         self.clear_progressBar()
         self.ProgressBar_Thread.progressBar = self.progressBar
         self.ProgressBar_Thread.start()
-        try:
-            program_list = self.data_from_spi.get_program_list()
-        except Exception as e:
-            program_list = []
-            self.main.message('c', "Brak połączenia z SPI !!!")
+        self.MySQL_Thread.data_from_spi = self.data_from_spi
+        program_list = self.data_from_spi.get_program_list()
+
         if program_list:
-            self.main.list_get_tolerance_from.addItems(program_list)
-            self.main.list_set_tolerance_to.addItems(program_list)
-            self.main.list_projet_name_library.addItems(program_list)
-            self.add_CompName_to_components_list()
-            self.fill_part_number_in_library()
-            self.MySQL_Thread.data_from_spi = self.data_from_spi
+            self.main.get_from.addItems(program_list)
+            self.main.set_in.addItems(program_list)
         self.main.show()
 
     def app_connection(self):
-        self.main.list_projet_name_library.currentIndexChanged.connect(self.add_CompName_to_components_list)
-        self.main.checkBox_CompName_library.stateChanged.connect(self.add_CompName_to_components_list)
-        self.main.btn_synchronize.clicked.connect(self.synchronize_tolerance_between_projects)
-        self.main.btn_update_from_library.clicked.connect(self.synchronize_tolerance_between_project_and_library)
+        self.main.btn_synchronize.clicked.connect(self.synchronize_tolerance)
         self.MySQL_Thread.finished.connect(self.mysql_update)
         self.ProgressBar_Thread.actual.connect(self.update_progressBar)
         self.ProgressBar_Thread.max.connect(self.set_max_value_in_progressBar)
-        self.main.CompName.currentIndexChanged.connect(self.show_part_number_to_current_component)
-        self.main.list_part_number.currentIndexChanged.connect(self.add_Padname_to_current_part_number)
-        self.main.list_PadName.currentIndexChanged.connect(self.add_Tolerance_to_current_PadName)
-        self.main.btn_save_library.clicked.connect(self.save_tolerance_in_library)
 
-    def show_part_number_to_current_component(self):
-        self.main.label_current_component.clear()
-        part_number = ""
-        current_CompName = self.main.CompName.currentText()
-        if current_CompName:
-            comp_info = self.data_from_spi.prepare_comp_info(database=self.main.list_projet_name_library.currentText())
-            if comp_info:
-                CompID = comp_info['CompID'].get(current_CompName)
-                part_number = comp_info['CompCode'].get(CompID)
-        self.main.label_current_component.setText(part_number)
-
-    def fill_part_number_in_library(self):
-        self.main.list_part_number.clear()
-        self.data_from_spi.prepare_part_number_from_library()
-        if self.data_from_spi.buffer.get('library'):
-            self.main.list_part_number.addItems([str(x) for x in self.data_from_spi.buffer['library'].keys() if x is not None])
-            self.add_Padname_to_current_part_number()
-            self.add_Tolerance_to_current_PadName()
-
-    def add_Padname_to_current_part_number(self):
-        self.main.list_PadName.clear()
-        if self.main.list_part_number.currentText():
-            part_number = self.main.list_part_number.currentText()
-            if self.data_from_spi.buffer.get('library'):
-                self.main.list_PadName.addItems([str(x) for x in self.data_from_spi.buffer['library'][part_number].keys() if x is not None])
-
-    def add_Tolerance_to_current_PadName(self):
-        self.fill_default_Tolerance()
-        if self.main.list_PadName.currentText():
-            Padname = self.main.list_PadName.currentText()
-            PartNumber = self.main.list_part_number.currentText()
-            if self.data_from_spi.buffer.get('library'):
-                values = self.data_from_spi.buffer['library'][PartNumber].get(Padname)
-                if values:
-                    self.main.HeightLSL.setValue(values['HeightLSL'])
-                    self.main.HeightUSL.setValue(values['HeightUSL'])
-                    self.main.AreaLSL.setValue(values['AreaLSL'])
-                    self.main.AreaUSL.setValue(values['AreaUSL'])
-                    self.main.VolumeLSL.setValue(values['VolumeLSL'])
-                    self.main.VolumeUSL.setValue(values['VolumeUSL'])
-                    self.main.checkBox_bridge.setChecked(bool(values['IsInspBridge']))
-
-    def fill_default_Tolerance(self):
-        self.main.HeightLSL.setValue(0)
-        self.main.HeightUSL.setValue(0)
-        self.main.AreaLSL.setValue(0)
-        self.main.AreaUSL.setValue(0)
-        self.main.VolumeLSL.setValue(0)
-        self.main.VolumeUSL.setValue(0)
-        self.main.checkBox_bridge.setChecked(False)
-
-    def save_tolerance_in_library(self):
-        tolerance = {}
-        status = {}
-        if self.data_from_spi.buffer.get('library'):
-            Padname = self.main.list_PadName.currentText()
-            PartNumber = self.main.list_part_number.currentText()
-            if self.data_from_spi.buffer['library'].get(PartNumber):
-                tolerance = copy.deepcopy(self.data_from_spi.buffer['library'][PartNumber].get(Padname))
-            if tolerance:
-                bridge = 1 if self.main.checkBox_bridge.isChecked() else 0
-                tolerance.update({
-                    'HeightLSL': self.main.HeightLSL.value(),
-                    'HeightUSL': self.main.HeightUSL.value(),
-                    'AreaLSL': self.main.AreaLSL.value(),
-                    'AreaUSL': self.main.AreaUSL.value(),
-                    'VolumeLSL': self.main.VolumeLSL.value(),
-                    'VolumeUSL': self.main.VolumeUSL.value(),
-                    'IsInspBridge': bridge})
-
-                status = self.data_from_spi.save_current_tolerance_in_library(PartNumber=PartNumber, PadName=Padname, tolerance=tolerance)
-
-        if status.get('message'):
-            self.main.message(status['message'][0], status['message'][1])
-
-
-    def add_CompName_to_components_list(self):
-        database = self.main.list_projet_name_library.currentText()
-        self.main.CompName.clear()
-        components = self.data_from_spi.get_CompName(database=database)
-        for CompName in components:
-            self.main.CompName.addItem(CompName, status=self.main.checkBox_CompName_library.isChecked())
-
-    def synchronize_tolerance_between_projects(self):
+    def synchronize_tolerance(self):
         self.lock_app(True)
-        self.main.text_logs.clear()
-        self.MySQL_Thread.mode = 1
-        self.MySQL_Thread.project_name_with_correct_tolerance = self.main.list_get_tolerance_from.currentText()
-        self.MySQL_Thread.new_project_name = self.main.list_set_tolerance_to.currentText()
+        self.main.raport.clear()
+        self.MySQL_Thread.get_from = self.main.get_from.currentText()
+        self.MySQL_Thread.set_in = self.main.set_in.currentText()
         self.MySQL_Thread.start()
-
-    def synchronize_tolerance_between_project_and_library(self):
-        self.lock_app(True, library=True)
-        choosen_components = self.get_components_from_list()
-        self.MySQL_Thread.mode = 2
-        self.MySQL_Thread.components = choosen_components
-        self.MySQL_Thread.new_project_name = self.main.list_projet_name_library.currentText()
-        self.MySQL_Thread.start()
-
-    def get_components_from_list(self):
-        return [self.main.CompName.itemText(x) for x in range(self.main.CompName.count()) if self.main.CompName.itemChecked(x) is True]
 
     def mysql_update(self, data):
         if data.get("message"):
-            self.main.message(f"{data['message'][0]}", data['message'][1])
-        if data.get("update status"):
+            self.main.message(data['message'][0], data['message'][1])
+        if data.get("update"):
             components_html = ""
-            if data['update status'].get('CompName'):
-                components_html += f"<p>{', '.join(data['update status'].get('CompName'))}</p>"
+            if data['update'].get('CompName'):
+                components_html += f"<p>{', '.join(data['update'].get('CompName'))}</p>"
 
-            if data['update status']['STATUS']:
+            if data['update']['status']:
                 data_html = ""
-                for row in data['update status']['Tolerance']:
+                for row in data['update']['tolerance']:
                     status_dict = {'HeightLSL': row['Original']['HeightLSL'] != row['New']['HeightLSL'],
                                    'HeightUSL': row['Original']['HeightUSL'] != row['New']['HeightUSL'],
                                    'AreaLSL': row['Original']['AreaLSL'] != row['New']['AreaLSL'],
@@ -194,33 +85,21 @@ class App:
                             data_html += f"<td>{row['New'][column_name]}</td>"
 
                     data_html += "</tr>"
-                self.main.text_logs.setHtml(self.html_schema(components=components_html, data=data_html))
+                self.main.raport.setHtml(self.html_schema(components=components_html, data=data_html))
                 self.progressBar['actual'] = self.progressBar['max']
-                self.main.message('i', f"Pomyślnie zaktualizowano tolerancje pomiędzy projektami ({data['update status']['Statistic'].get('Changed')}/{data['update status']['Statistic'].get('All')}).")
+                self.main.message('i', f"Pomyślnie zaktualizowano tolerancje pomiędzy projektami ({data['update']['statistic'].get('Changed')}/{data['update']['statistic'].get('All')}).")
             else:
-                if data['update status'].get('messages'):
-                    for i, message in data['update status']['messages']:
-                        self.main.message(i, message)
+                if data['update'].get('message'):
+                    self.main.message(data['update']['message'][0], data['update']['message'][1])
                 else:
                     self.main.message('w', 'Błąd podczas aktualizacji komponentów!!!')
-        if self.MySQL_Thread.mode == 1:
-            self.lock_app(False)
-            self.clear_progressBar()
-        elif self.MySQL_Thread.mode == 2:
-            self.lock_app(False, library=True)
+
+        self.clear_progressBar()
+        self.lock_app(False)
 
     def lock_app(self, status, **kwargs):
-        if kwargs.get('library'):
-            self.main.tab.setDisabled(status)
-            self.main.btn_save_library.setDisabled(status)
-            self.main.list_projet_name_library.setDisabled(status)
-            self.main.CompName.setDisabled(status)
-            self.main.list_PadName.setDisabled(status)
-            self.main.list_part_number.setDisabled(status)
-            self.main.frame_tolerance.setDisabled(status)
-        self.main.list_get_tolerance_from.setDisabled(status)
-        self.main.list_set_tolerance_to.setDisabled(status)
-        self.main.tab_2.setDisabled(status)
+        self.main.get_from.setDisabled(status)
+        self.main.set_in.setDisabled(status)
         self.main.btn_synchronize.setDisabled(status)
 
     def html_schema(self, components, data=""):
@@ -276,29 +155,23 @@ class App:
 class MySQL_Thread(QThread):
     finished = pyqtSignal(object)
     data_from_spi = None
-    project_name_with_correct_tolerance = ""
-    new_project_name = ""
+    get_from = ""
+    set_in = ""
     components = []
-    tolerance_from_library = []
     board_informations = None
-    mode = None
 
     def run(self) -> None:
-        if self.mode == 1:
-            if self.project_name_with_correct_tolerance == self.new_project_name:
-                self.finished.emit({"message": ("i", "Kopiowanie do tego samego projektu nie przyniesie rezultatu.")})
+        if self.get_from == self.set_in:
+            if self.get_from == "":
                 return
-            try:
-                self.data_from_spi.copy_pad_info_to_new_project(project_name_with_correct_tolerance=self.project_name_with_correct_tolerance, new_project_name=self.new_project_name)
-                self.finished.emit({"update status": self.data_from_spi.update_status})
-            except Exception as e:
-                self.finished.emit({"message": ("w", f"Błąd podczas synchronizacji komponentów!!!\n{e}")})
-        elif self.mode == 2:
-            try:
-                self.data_from_spi.copy_part_number_tolerance_to_project(new_project_name=self.new_project_name, CompName=self.components)
-                self.finished.emit({"message": ("i", "Pomyślnie zakończono synchronizację")})
-            except Exception as e:
-                self.finished.emit({"message": ("w", f"Błąd podczas synchronizacji komponentów!!!\n{e}")})
+            self.finished.emit({"message": ("i", "Kopiowanie do tego samego projektu nie przyniesie rezultatu.")})
+            return
+        try:
+            self.data_from_spi.copy_pad_info_to_new_project(get_from=self.get_from,
+                                                            set_in=self.set_in)
+            self.finished.emit({"update": self.data_from_spi.update})
+        except Exception as e:
+            self.finished.emit({"message": ("w", f"Błąd podczas synchronizacji komponentów!!!\n{e}")})
 
 
 class ProgressBar_Thread(QThread):
