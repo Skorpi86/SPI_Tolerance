@@ -54,7 +54,8 @@ class App:
         if data.get("update"):
             components_html = ""
             if data['update'].get('CompName'):
-                components_html += f"<p>{', '.join(data['update'].get('CompName'))}</p>"
+                data['update']['CompName'].sort()
+                components_html += f"<p>{', '.join(data['update']['CompName'])}</p>"
 
             if data['update']['status']:
                 data_html = ""
